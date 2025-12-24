@@ -265,6 +265,7 @@ export function createWallPerimeterLine(
   group.userData.halfHeight = halfHeight;
   group.userData.zOffset = zOffset;
   group.userData.segmentLength = segmentLength;
+  group.userData.lineThickness = lineThickness;
 
   // Apply wall's transform to the group
   group.position.copy(position);
@@ -279,30 +280,70 @@ export function createWallPerimeterLine(
  * @param offset - Offset along the perimeter (0 to perimeterLength)
  */
 export function updatePerimeterLineAnimation(group: Group, offset: number): void {
-  const { dashSegments, perimeterLength, size, halfWidth, halfHeight, zOffset } = group.userData;
+  const { dashSegments, perimeterLength, size, halfWidth, halfHeight, zOffset, lineThickness } = group.userData;
   if (!dashSegments) return;
 
   dashSegments.forEach((segment: DashSegment) => {
     let position = (segment.basePosition + offset) % perimeterLength;
+    const dashLength = segment.length;
 
     // Determine which edge the dash should be on based on position
+    let currentEdge: 'top' | 'right' | 'bottom' | 'left';
+    let meshX: number, meshY: number;
+
     if (position < size.x) {
-      // Top edge (left to right)
-      const x = position - size.x / 2;
-      segment.mesh.position.set(x, halfHeight, zOffset);
+      // Top edge (left to right) - horizontal
+      currentEdge = 'top';
+      meshX = position - size.x / 2;
+      meshY = halfHeight;
     } else if (position < size.x + size.y) {
-      // Right edge (top to bottom)
-      const y = halfHeight - (position - size.x);
-      segment.mesh.position.set(halfWidth, y, zOffset);
+      // Right edge (top to bottom) - vertical
+      currentEdge = 'right';
+      meshX = halfWidth;
+      meshY = halfHeight - (position - size.x);
     } else if (position < 2 * size.x + size.y) {
-      // Bottom edge (right to left)
-      const x = halfWidth - (position - size.x - size.y);
-      segment.mesh.position.set(x, -halfHeight, zOffset);
+      // Bottom edge (right to left) - horizontal
+      currentEdge = 'bottom';
+      meshX = halfWidth - (position - size.x - size.y);
+      meshY = -halfHeight;
     } else {
-      // Left edge (bottom to top)
-      const y = -halfHeight + (position - 2 * size.x - size.y);
-      segment.mesh.position.set(-halfWidth, y, zOffset);
+      // Left edge (bottom to top) - vertical
+      currentEdge = 'left';
+      meshX = -halfWidth;
+      meshY = -halfHeight + (position - 2 * size.x - size.y);
     }
+
+    // Update position
+    segment.mesh.position.set(meshX, meshY, zOffset);
+
+    // Update rotation and scale based on current edge orientation
+    const originalIsHorizontal = segment.edge === 'top' || segment.edge === 'bottom';
+    const currentIsHorizontal = currentEdge === 'top' || currentEdge === 'bottom';
+
+    if (currentIsHorizontal) {
+      // Dash should be horizontal (wide, thin)
+      segment.mesh.rotation.z = 0;
+      if (originalIsHorizontal) {
+        // Already horizontal geometry - no scale change needed
+        segment.mesh.scale.set(1, 1, 1);
+      } else {
+        // Was vertical, need to swap dimensions
+        segment.mesh.scale.set(dashLength / lineThickness, lineThickness / dashLength, 1);
+      }
+    } else {
+      // Dash should be vertical (tall, thin)
+      segment.mesh.rotation.z = Math.PI / 2;
+      if (originalIsHorizontal) {
+        // Was horizontal, need to swap dimensions
+        segment.mesh.scale.set(lineThickness / dashLength, dashLength / lineThickness, 1);
+      } else {
+        // Already vertical geometry - no scale change needed
+        segment.mesh.scale.set(1, 1, 1);
+      }
+    }
+
+    // Update the stored edge for next frame
+    segment.edge = currentEdge;
   });
 }
 
