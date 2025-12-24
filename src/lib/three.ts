@@ -128,6 +128,7 @@ interface DashSegment {
   edge: 'top' | 'bottom' | 'left' | 'right';
   basePosition: number; // Position along the edge
   length: number; // Dash length
+  isHorizontalGeometry: boolean; // Whether the geometry was created as horizontal (wide) or vertical (tall)
 }
 
 /**
@@ -171,16 +172,19 @@ export function createWallPerimeterLine(
     
     const dashWidth = endX - startX;
     if (dashWidth > 0) {
+      // Always create as horizontal geometry (wide X, thin Y)
       const geometry = new BoxGeometry(dashWidth, lineThickness, lineThickness);
       const mesh = new Mesh(geometry, material);
       const basePosition = startX + halfWidth; // Position along top edge (0 to width)
       mesh.position.set((startX + endX) / 2, halfHeight, zOffset);
+      mesh.rotation.z = 0; // Horizontal
       group.add(mesh);
       dashSegments.push({
         mesh,
         edge: 'top',
         basePosition,
         length: dashWidth,
+        isHorizontalGeometry: true,
       });
     }
   }
@@ -195,16 +199,19 @@ export function createWallPerimeterLine(
     
     const dashHeight = startY - endY;
     if (dashHeight > 0) {
-      const geometry = new BoxGeometry(lineThickness, dashHeight, lineThickness);
+      // Create as horizontal geometry, will rotate to vertical
+      const geometry = new BoxGeometry(dashHeight, lineThickness, lineThickness);
       const mesh = new Mesh(geometry, material);
       const basePosition = size.x + (halfHeight - startY); // Position along perimeter
       mesh.position.set(halfWidth, (startY + endY) / 2, zOffset);
+      mesh.rotation.z = Math.PI / 2; // Rotate to vertical
       group.add(mesh);
       dashSegments.push({
         mesh,
         edge: 'right',
         basePosition,
         length: dashHeight,
+        isHorizontalGeometry: true, // Created as horizontal, rotated
       });
     }
   }
@@ -219,16 +226,19 @@ export function createWallPerimeterLine(
     
     const dashWidth = startX - endX;
     if (dashWidth > 0) {
+      // Always create as horizontal geometry (wide X, thin Y)
       const geometry = new BoxGeometry(dashWidth, lineThickness, lineThickness);
       const mesh = new Mesh(geometry, material);
       const basePosition = size.x + size.y + (halfWidth - startX); // Position along perimeter
       mesh.position.set((startX + endX) / 2, -halfHeight, zOffset);
+      mesh.rotation.z = 0; // Horizontal
       group.add(mesh);
       dashSegments.push({
         mesh,
         edge: 'bottom',
         basePosition,
         length: dashWidth,
+        isHorizontalGeometry: true,
       });
     }
   }
@@ -243,16 +253,19 @@ export function createWallPerimeterLine(
     
     const dashHeight = endY - startY;
     if (dashHeight > 0) {
-      const geometry = new BoxGeometry(lineThickness, dashHeight, lineThickness);
+      // Create as horizontal geometry, will rotate to vertical
+      const geometry = new BoxGeometry(dashHeight, lineThickness, lineThickness);
       const mesh = new Mesh(geometry, material);
       const basePosition = 2 * size.x + size.y + (startY + halfHeight); // Position along perimeter
       mesh.position.set(-halfWidth, (startY + endY) / 2, zOffset);
+      mesh.rotation.z = Math.PI / 2; // Rotate to vertical
       group.add(mesh);
       dashSegments.push({
         mesh,
         edge: 'left',
         basePosition,
         length: dashHeight,
+        isHorizontalGeometry: true, // Created as horizontal, rotated
       });
     }
   }
@@ -280,12 +293,11 @@ export function createWallPerimeterLine(
  * @param offset - Offset along the perimeter (0 to perimeterLength)
  */
 export function updatePerimeterLineAnimation(group: Group, offset: number): void {
-  const { dashSegments, perimeterLength, size, halfWidth, halfHeight, zOffset, lineThickness } = group.userData;
+  const { dashSegments, perimeterLength, size, halfWidth, halfHeight, zOffset } = group.userData;
   if (!dashSegments) return;
 
   dashSegments.forEach((segment: DashSegment) => {
     let position = (segment.basePosition + offset) % perimeterLength;
-    const dashLength = segment.length;
 
     // Determine which edge the dash should be on based on position
     let currentEdge: 'top' | 'right' | 'bottom' | 'left';
@@ -316,30 +328,24 @@ export function updatePerimeterLineAnimation(group: Group, offset: number): void
     // Update position
     segment.mesh.position.set(meshX, meshY, zOffset);
 
-    // Update rotation and scale based on current edge orientation
-    const originalIsHorizontal = segment.edge === 'top' || segment.edge === 'bottom';
+    // Update rotation based on current edge orientation
+    // All geometries are created as horizontal (wide X, thin Y)
+    // So we just need to rotate when on vertical edges
     const currentIsHorizontal = currentEdge === 'top' || currentEdge === 'bottom';
 
     if (currentIsHorizontal) {
-      // Dash should be horizontal (wide, thin)
+      // Dash should be horizontal - no rotation needed
       segment.mesh.rotation.z = 0;
-      if (originalIsHorizontal) {
-        // Already horizontal geometry - no scale change needed
-        segment.mesh.scale.set(1, 1, 1);
-      } else {
-        // Was vertical, need to swap dimensions
-        segment.mesh.scale.set(dashLength / lineThickness, lineThickness / dashLength, 1);
-      }
+      segment.mesh.scale.set(1, 1, 1);
     } else {
-      // Dash should be vertical (tall, thin)
+      // Dash should be vertical - rotate 90 degrees
+      // When we rotate horizontal geometry by π/2:
+      // - X (wide) becomes -Y, Y (thin) becomes X
+      // - So we get: thin in X, wide in -Y
+      // - We want: thin in X, wide in Y
+      // - The rotation gives us the right dimensions, just need to ensure scale is correct
       segment.mesh.rotation.z = Math.PI / 2;
-      if (originalIsHorizontal) {
-        // Was horizontal, need to swap dimensions
-        segment.mesh.scale.set(lineThickness / dashLength, dashLength / lineThickness, 1);
-      } else {
-        // Already vertical geometry - no scale change needed
-        segment.mesh.scale.set(1, 1, 1);
-      }
+      segment.mesh.scale.set(1, 1, 1);
     }
 
     // Update the stored edge for next frame
