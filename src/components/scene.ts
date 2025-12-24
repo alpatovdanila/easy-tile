@@ -26,6 +26,7 @@ import {
   getWallIdFromIntersection,
   mmToMeters,
   createWallPerimeterLine,
+  updatePerimeterLineAnimation,
 } from '../lib/three';
 import type { RootStore } from '../model';
 import type { WallId } from '../types/wall.types';
@@ -520,16 +521,16 @@ function animate(): void {
     if (controls && renderer && scene && camera) {
       controls.update();
       
-      // Animate perimeter line dash pattern (for geometry-based lines, we can rotate or pulse)
+      // Animate perimeter line dash pattern - move dashes along the perimeter
       if (store) {
         const selectedWallId = store.wall.selectedWallId;
         if (selectedWallId) {
           const group = perimeterLines.get(selectedWallId);
-          if (group) {
-            // Create a subtle pulsing effect by scaling the group
+          if (group && group.userData.perimeterLength) {
             const time = performance.now() * 0.001; // Convert to seconds
-            const pulse = 1 + Math.sin(time * 3) * 0.1; // Subtle pulse (10% variation)
-            group.scale.set(pulse, pulse, pulse);
+            const speed = 0.5; // meters per second
+            const offset = (time * speed) % group.userData.perimeterLength;
+            updatePerimeterLineAnimation(group, offset);
           }
         }
       }

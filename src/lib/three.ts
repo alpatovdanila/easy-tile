@@ -123,13 +123,20 @@ export function metersToMm(meters: number): number {
   return meters * 1000;
 }
 
+interface DashSegment {
+  mesh: Mesh;
+  edge: 'top' | 'bottom' | 'left' | 'right';
+  basePosition: number; // Position along the edge
+  length: number; // Dash length
+}
+
 /**
  * Create a thick dashed perimeter border for a wall using geometry
  * @param _wallId - The wall identifier (unused, kept for API consistency)
  * @param position - Wall center position
  * @param rotation - Wall rotation (Euler angles)
  * @param size - Wall dimensions (width, height)
- * @returns A Group containing the perimeter border meshes
+ * @returns A Group containing the perimeter border meshes with animation data
  */
 export function createWallPerimeterLine(
   _wallId: WallId,
@@ -139,7 +146,7 @@ export function createWallPerimeterLine(
 ): Group {
   const halfWidth = size.x / 2;
   const halfHeight = size.y / 2;
-  const offset = 0.01; // Offset to prevent z-fighting (increased for visibility)
+  const zOffset = 0.01; // Offset to prevent z-fighting (increased for visibility)
   const lineThickness = 0.02; // 2cm thick line
   const dashLength = 0.15; // 15cm dash length
   const gapLength = 0.08; // 8cm gap length
@@ -150,8 +157,11 @@ export function createWallPerimeterLine(
     color: 0xff6b6b, // Bright accent color
   });
 
-  // Create dashed segments for each edge
-  // Top edge
+  const dashSegments: DashSegment[] = [];
+  const perimeterLength = 2 * (size.x + size.y);
+
+  // Create dashed segments for each edge and store their metadata
+  // Top edge (left to right)
   const topEdgeLength = size.x;
   const topSegments = Math.ceil(topEdgeLength / segmentLength);
   for (let i = 0; i < topSegments; i++) {
@@ -163,29 +173,67 @@ export function createWallPerimeterLine(
     if (dashWidth > 0) {
       const geometry = new BoxGeometry(dashWidth, lineThickness, lineThickness);
       const mesh = new Mesh(geometry, material);
-      mesh.position.set((startX + endX) / 2, halfHeight, offset);
+      const basePosition = startX + halfWidth; // Position along top edge (0 to width)
+      mesh.position.set((startX + endX) / 2, halfHeight, zOffset);
       group.add(mesh);
+      dashSegments.push({
+        mesh,
+        edge: 'top',
+        basePosition,
+        length: dashWidth,
+      });
     }
   }
 
-  // Bottom edge
+  // Right edge (top to bottom)
+  const rightEdgeLength = size.y;
+  const rightSegments = Math.ceil(rightEdgeLength / segmentLength);
+  for (let i = 0; i < rightSegments; i++) {
+    const startY = halfHeight - i * segmentLength;
+    const endY = Math.max(startY - dashLength, -halfHeight);
+    if (startY <= -halfHeight) break;
+    
+    const dashHeight = startY - endY;
+    if (dashHeight > 0) {
+      const geometry = new BoxGeometry(lineThickness, dashHeight, lineThickness);
+      const mesh = new Mesh(geometry, material);
+      const basePosition = size.x + (halfHeight - startY); // Position along perimeter
+      mesh.position.set(halfWidth, (startY + endY) / 2, zOffset);
+      group.add(mesh);
+      dashSegments.push({
+        mesh,
+        edge: 'right',
+        basePosition,
+        length: dashHeight,
+      });
+    }
+  }
+
+  // Bottom edge (right to left)
   const bottomEdgeLength = size.x;
   const bottomSegments = Math.ceil(bottomEdgeLength / segmentLength);
   for (let i = 0; i < bottomSegments; i++) {
-    const startX = -halfWidth + i * segmentLength;
-    const endX = Math.min(startX + dashLength, halfWidth);
-    if (startX >= halfWidth) break;
+    const startX = halfWidth - i * segmentLength;
+    const endX = Math.max(startX - dashLength, -halfWidth);
+    if (startX <= -halfWidth) break;
     
-    const dashWidth = endX - startX;
+    const dashWidth = startX - endX;
     if (dashWidth > 0) {
       const geometry = new BoxGeometry(dashWidth, lineThickness, lineThickness);
       const mesh = new Mesh(geometry, material);
-      mesh.position.set((startX + endX) / 2, -halfHeight, offset);
+      const basePosition = size.x + size.y + (halfWidth - startX); // Position along perimeter
+      mesh.position.set((startX + endX) / 2, -halfHeight, zOffset);
       group.add(mesh);
+      dashSegments.push({
+        mesh,
+        edge: 'bottom',
+        basePosition,
+        length: dashWidth,
+      });
     }
   }
 
-  // Left edge
+  // Left edge (bottom to top)
   const leftEdgeLength = size.y;
   const leftSegments = Math.ceil(leftEdgeLength / segmentLength);
   for (let i = 0; i < leftSegments; i++) {
@@ -197,32 +245,64 @@ export function createWallPerimeterLine(
     if (dashHeight > 0) {
       const geometry = new BoxGeometry(lineThickness, dashHeight, lineThickness);
       const mesh = new Mesh(geometry, material);
-      mesh.position.set(-halfWidth, (startY + endY) / 2, offset);
+      const basePosition = 2 * size.x + size.y + (startY + halfHeight); // Position along perimeter
+      mesh.position.set(-halfWidth, (startY + endY) / 2, zOffset);
       group.add(mesh);
+      dashSegments.push({
+        mesh,
+        edge: 'left',
+        basePosition,
+        length: dashHeight,
+      });
     }
   }
 
-  // Right edge
-  const rightEdgeLength = size.y;
-  const rightSegments = Math.ceil(rightEdgeLength / segmentLength);
-  for (let i = 0; i < rightSegments; i++) {
-    const startY = -halfHeight + i * segmentLength;
-    const endY = Math.min(startY + dashLength, halfHeight);
-    if (startY >= halfHeight) break;
-    
-    const dashHeight = endY - startY;
-    if (dashHeight > 0) {
-      const geometry = new BoxGeometry(lineThickness, dashHeight, lineThickness);
-      const mesh = new Mesh(geometry, material);
-      mesh.position.set(halfWidth, (startY + endY) / 2, offset);
-      group.add(mesh);
-    }
-  }
+  // Store animation data in group userData
+  group.userData.dashSegments = dashSegments;
+  group.userData.perimeterLength = perimeterLength;
+  group.userData.size = size;
+  group.userData.halfWidth = halfWidth;
+  group.userData.halfHeight = halfHeight;
+  group.userData.zOffset = zOffset;
+  group.userData.segmentLength = segmentLength;
 
   // Apply wall's transform to the group
   group.position.copy(position);
   group.rotation.set(rotation.x, rotation.y, rotation.z);
 
   return group;
+}
+
+/**
+ * Update dash positions to create a moving animation along the perimeter
+ * @param group - The perimeter line group
+ * @param offset - Offset along the perimeter (0 to perimeterLength)
+ */
+export function updatePerimeterLineAnimation(group: Group, offset: number): void {
+  const { dashSegments, perimeterLength, size, halfWidth, halfHeight, zOffset } = group.userData;
+  if (!dashSegments) return;
+
+  dashSegments.forEach((segment: DashSegment) => {
+    let position = (segment.basePosition + offset) % perimeterLength;
+
+    // Determine which edge the dash should be on based on position
+    if (position < size.x) {
+      // Top edge (left to right)
+      const x = position - size.x / 2;
+      segment.mesh.position.set(x, halfHeight, zOffset);
+    } else if (position < size.x + size.y) {
+      // Right edge (top to bottom)
+      const y = halfHeight - (position - size.x);
+      segment.mesh.position.set(halfWidth, y, zOffset);
+    } else if (position < 2 * size.x + size.y) {
+      // Bottom edge (right to left)
+      const x = halfWidth - (position - size.x - size.y);
+      segment.mesh.position.set(x, -halfHeight, zOffset);
+    } else {
+      // Left edge (bottom to top)
+      const y = -halfHeight + (position - 2 * size.x - size.y);
+      segment.mesh.position.set(-halfWidth, y, zOffset);
+    }
+  });
 }
 
