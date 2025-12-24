@@ -195,14 +195,23 @@ export class RoomStore {
 ## Development Workflow
 
 ### Feature Implementation
-1. **Create Feature Branch**: Checkout a new git branch with descriptive feature name (e.g., `feature/wall-selection`, `feature/tile-configuration`)
+1. **MANDATORY: Create Feature Branch FIRST**: 
+   - **ALWAYS** create a new git branch before starting any fix or feature work
+   - Checkout a new git branch with descriptive feature name (e.g., `feature/wall-selection`, `feature/tile-configuration`, `fix/camera-rotation-bug`)
+   - Use `feature/` prefix for new features and `fix/` prefix for bug fixes
+   - Never make changes directly on master/main branch
 2. **Test-Driven Development**: 
    - Write unit tests first when possible
    - If no existing tests, write tests before implementation
    - Verify old and new tests pass after implementation
 3. **Implementation**: Follow architecture and code style guidelines
 4. **Code Review**: Ensure code follows all guidelines
-5. **Merge Request**: Create merge request to master branch after local approval
+5. **MANDATORY: Commit Changes After Completion**:
+   - After implementation is complete and accepted by the user, commit all changes
+   - Use descriptive commit messages that clearly explain what was changed and why
+   - Stage all relevant files (use `git add .` or specific files as appropriate)
+   - Create commit with meaningful message (e.g., `git commit -m "feat: implement wall selection with click detection"` or `git commit -m "fix: resolve camera rotation jitter issue"`)
+6. **Merge Request**: Create merge request to master branch after local approval
 
 ### Testing Strategy
 - Unit tests for stores and business logic
@@ -210,8 +219,10 @@ export class RoomStore {
 - Integration tests for user interactions
 
 ### Git Workflow
-- Feature branches from master
-- Descriptive commit messages
+- **CRITICAL**: Always create a new branch before making any changes (fixes or features)
+- Fix and Feature branches from master
+- Descriptive commit messages following conventional commits format (feat:, fix:, refactor:, etc.)
+- Commit changes after implementation is complete and accepted
 - Merge requests for code review
 - Keep commits focused and atomic
 
@@ -283,6 +294,8 @@ export function Room({ width, height, length }: RoomProps) {
 ## Notes for Agents
 
 - **Always reference this document** when making architectural decisions
+- **MANDATORY: Create a branch first** - Never start implementing fixes or features without creating a new git branch first
+- **MANDATORY: Commit after completion** - Always commit changes after implementation is complete and accepted by the user
 - **Ask for clarification** if requirements are ambiguous
 - **Follow the separation of concerns** strictly - don't mix store and view logic
 - **Use TypeScript types** - avoid `any` unless absolutely necessary

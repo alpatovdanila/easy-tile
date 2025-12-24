@@ -1,7 +1,15 @@
 /**
  * Three.js helper functions
  */
-import { Camera, Raycaster, Vector2, Vector3 } from 'three';
+import {
+  Camera,
+  Raycaster,
+  Vector2,
+  Vector3,
+  BufferGeometry,
+  Line,
+  LineDashedMaterial,
+} from 'three';
 import type { Intersection } from 'three';
 import type { WallId } from '../types/wall.types';
 
@@ -112,5 +120,54 @@ export function mmToMeters(mm: number): number {
 
 export function metersToMm(meters: number): number {
   return meters * 1000;
+}
+
+/**
+ * Create a dashed perimeter line for a wall
+ * @param _wallId - The wall identifier (unused, kept for API consistency)
+ * @param position - Wall center position
+ * @param rotation - Wall rotation (Euler angles)
+ * @param size - Wall dimensions (width, height)
+ * @returns A Line object with dashed material
+ */
+export function createWallPerimeterLine(
+  _wallId: WallId,
+  position: Vector3,
+  rotation: Vector3,
+  size: Vector2
+): Line {
+  const halfWidth = size.x / 2;
+  const halfHeight = size.y / 2;
+  const offset = 0.001; // Small offset to prevent z-fighting
+
+  // Calculate corner points in local space (wall's local coordinate system)
+  // The wall is a plane in XY plane, with normal pointing in +Z direction
+  const corners = [
+    new Vector3(-halfWidth, -halfHeight, offset),
+    new Vector3(halfWidth, -halfHeight, offset),
+    new Vector3(halfWidth, halfHeight, offset),
+    new Vector3(-halfWidth, halfHeight, offset),
+    new Vector3(-halfWidth, -halfHeight, offset), // Close loop
+  ];
+
+  // Create geometry from points (in local space)
+  const geometry = new BufferGeometry().setFromPoints(corners);
+
+  // Create dashed material
+  const material = new LineDashedMaterial({
+    color: 0xff6b6b, // Bright accent color
+    dashSize: 0.1, // meters
+    gapSize: 0.05, // meters
+    linewidth: 2,
+  });
+
+  const line = new Line(geometry, material);
+  line.computeLineDistances(); // Required for LineDashedMaterial (called on Line, not geometry)
+
+  // Apply wall's transform to the line
+  line.position.copy(position);
+  line.rotation.set(rotation.x, rotation.y, rotation.z);
+
+  return line;
 }
 

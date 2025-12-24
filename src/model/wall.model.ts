@@ -9,6 +9,7 @@ import { saveToStorage, loadFromStorage, STORAGE_KEYS } from '../lib/storage';
 
 export class WallModel {
   selectedWallId: WallId | null = null;
+  hoveredWallId: WallId | null = null;
   wallConfigs: WallConfigs = {
     front: { ...DEFAULT_TILE_CONFIG },
     back: { ...DEFAULT_TILE_CONFIG },
@@ -23,6 +24,15 @@ export class WallModel {
 
   selectWall(wallId: WallId): void {
     this.selectedWallId = wallId;
+    this.saveSelectedWall();
+  }
+
+  setHoveredWall(wallId: WallId | null): void {
+    this.hoveredWallId = wallId;
+  }
+
+  deselectWall(): void {
+    this.selectedWallId = null;
     this.saveSelectedWall();
   }
 

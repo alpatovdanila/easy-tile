@@ -18,8 +18,16 @@ import {
   CanvasTexture,
   AmbientLight,
   DirectionalLight,
+  Line,
+  LineDashedMaterial,
 } from 'three';
-import { createOrbitControls, createRaycaster, getWallIdFromIntersection, mmToMeters } from '../lib/three';
+import {
+  createOrbitControls,
+  createRaycaster,
+  getWallIdFromIntersection,
+  mmToMeters,
+  createWallPerimeterLine,
+} from '../lib/three';
 import type { RootStore } from '../model';
 import type { WallId } from '../types/wall.types';
 import { autorun } from 'mobx';
@@ -30,10 +38,14 @@ let renderer: WebGLRenderer | null = null;
 let controls: ReturnType<typeof createOrbitControls> | null = null;
 let raycaster: ReturnType<typeof createRaycaster> | null = null;
 let wallMeshes: Map<WallId | 'top' | 'bottom', Mesh> = new Map();
+let wallOriginalMaterials: Map<WallId, MeshStandardMaterial> = new Map();
+let perimeterLines: Map<WallId, Line> = new Map();
 let animationFrameId: number | null = null;
 let textureLoader: TextureLoader | null = null;
 let mouseDownPosition: Vector2 | null = null;
 let hasDragged = false;
+let lastHoveredWallId: WallId | null = null;
+let store: RootStore | null = null;
 
 /**
  * Generate a checkerboard texture programmatically
@@ -69,7 +81,8 @@ function createCheckerboardTexture(
   return texture;
 }
 
-export function initScene(container: HTMLElement, store: RootStore): void {
+export function initScene(container: HTMLElement, rootStore: RootStore): void {
+  store = rootStore;
   // Initialize Three.js components
   scene = new Scene();
   scene.background = new Color(0xf0f0f0);
@@ -99,11 +112,27 @@ export function initScene(container: HTMLElement, store: RootStore): void {
   textureLoader = new TextureLoader();
 
   // Initial room render
-  updateRoom(store);
+  updateRoom(rootStore);
 
   // Subscribe to store changes
   autorun(() => {
-    updateRoom(store);
+    if (store) {
+      updateRoom(store);
+    }
+  });
+
+  // Subscribe to hover state changes
+  autorun(() => {
+    if (store) {
+      updateHoverHighlight(store.wall.hoveredWallId);
+    }
+  });
+
+  // Subscribe to selected wall changes for perimeter line
+  autorun(() => {
+    if (store) {
+      updatePerimeterLine(store);
+    }
   });
 
   // Track mouse down to detect drags
@@ -112,7 +141,7 @@ export function initScene(container: HTMLElement, store: RootStore): void {
     hasDragged = false;
   });
 
-  // Track mouse move to detect if it's a drag
+  // Track mouse move to detect if it's a drag and handle hover
   container.addEventListener('mousemove', (event) => {
     if (mouseDownPosition) {
       const deltaX = Math.abs(event.clientX - mouseDownPosition.x);
@@ -122,6 +151,19 @@ export function initScene(container: HTMLElement, store: RootStore): void {
         hasDragged = true;
       }
     }
+    // Handle hover detection (only when not dragging)
+    if (!mouseDownPosition && store) {
+      handleHover(event, container, store);
+    }
+  });
+
+  // Clear hover when mouse leaves canvas
+  container.addEventListener('mouseleave', () => {
+    if (store) {
+      store.wall.setHoveredWall(null);
+    }
+    lastHoveredWallId = null;
+    updateHoverHighlight(null);
   });
 
   // Mouse up handler - keep hasDragged flag until click event processes
@@ -133,7 +175,7 @@ export function initScene(container: HTMLElement, store: RootStore): void {
   // Mouse click handler for wall selection (only if not a drag)
   container.addEventListener('click', (event) => {
     // Only handle click if we haven't dragged during this interaction
-    if (!hasDragged) {
+    if (!hasDragged && store) {
       handleClick(event, container, store);
     }
     // Reset drag state after click is processed
@@ -165,6 +207,21 @@ function updateRoom(store: RootStore): void {
     }
   });
   wallMeshes.clear();
+  wallOriginalMaterials.clear();
+
+  // Clear existing perimeter lines
+  perimeterLines.forEach((line) => {
+    scene!.remove(line);
+    if (line.geometry) line.geometry.dispose();
+    if (line.material) {
+      if (Array.isArray(line.material)) {
+        line.material.forEach((mat) => mat.dispose());
+      } else {
+        line.material.dispose();
+      }
+    }
+  });
+  perimeterLines.clear();
 
   const width = mmToMeters(store.room.width);
   const height = mmToMeters(store.room.height);
@@ -176,44 +233,56 @@ function updateRoom(store: RootStore): void {
   const halfLength = length / 2;
 
   // Front wall (editable) - faces inward toward center (+Z direction)
+  const frontPosition = new Vector3(0, 0, -halfLength);
+  const frontRotation = new Vector3(0, 0, 0);
   createWall(
     'front',
-    new Vector3(0, 0, -halfLength),
-    new Vector3(0, 0, 0),
+    frontPosition,
+    frontRotation,
     new Vector2(width, height),
     store.wall.wallConfigs.front,
     scene
   );
+  createPerimeterLineForWall('front', frontPosition, frontRotation, new Vector2(width, height), scene);
 
   // Back wall (editable) - faces inward toward center (-Z direction)
+  const backPosition = new Vector3(0, 0, halfLength);
+  const backRotation = new Vector3(0, Math.PI, 0);
   createWall(
     'back',
-    new Vector3(0, 0, halfLength),
-    new Vector3(0, Math.PI, 0),
+    backPosition,
+    backRotation,
     new Vector2(width, height),
     store.wall.wallConfigs.back,
     scene
   );
+  createPerimeterLineForWall('back', backPosition, backRotation, new Vector2(width, height), scene);
 
   // Left wall (editable) - faces inward toward center (+X direction)
+  const leftPosition = new Vector3(-halfWidth, 0, 0);
+  const leftRotation = new Vector3(0, Math.PI / 2, 0);
   createWall(
     'left',
-    new Vector3(-halfWidth, 0, 0),
-    new Vector3(0, Math.PI / 2, 0),
+    leftPosition,
+    leftRotation,
     new Vector2(length, height),
     store.wall.wallConfigs.left,
     scene
   );
+  createPerimeterLineForWall('left', leftPosition, leftRotation, new Vector2(length, height), scene);
 
   // Right wall (editable) - faces inward toward center (-X direction)
+  const rightPosition = new Vector3(halfWidth, 0, 0);
+  const rightRotation = new Vector3(0, -Math.PI / 2, 0);
   createWall(
     'right',
-    new Vector3(halfWidth, 0, 0),
-    new Vector3(0, -Math.PI / 2, 0),
+    rightPosition,
+    rightRotation,
     new Vector2(length, height),
     store.wall.wallConfigs.right,
     scene
   );
+  createPerimeterLineForWall('right', rightPosition, rightRotation, new Vector2(length, height), scene);
 
   // Top wall (ceiling, non-editable)
   createWall(
@@ -306,6 +375,24 @@ function createWall(
   
   scene.add(mesh);
   wallMeshes.set(wallId, mesh);
+
+  // Store original material for editable walls
+  if (wallId !== 'top' && wallId !== 'bottom' && material instanceof MeshStandardMaterial) {
+    wallOriginalMaterials.set(wallId, material);
+  }
+}
+
+function createPerimeterLineForWall(
+  wallId: WallId,
+  position: Vector3,
+  rotation: Vector3,
+  size: Vector2,
+  scene: Scene
+): void {
+  const line = createWallPerimeterLine(wallId, position, rotation, size);
+  line.visible = false; // Hidden by default, shown when wall is selected
+  scene.add(line);
+  perimeterLines.set(wallId, line);
 }
 
 function handleClick(
@@ -348,6 +435,78 @@ function handleResize(container: HTMLElement): void {
   renderer.setSize(width, height);
 }
 
+function handleHover(
+  event: MouseEvent,
+  container: HTMLElement,
+  store: RootStore
+): void {
+  if (!camera || !raycaster || !scene) return;
+
+  const rect = container.getBoundingClientRect();
+  const mouse = new Vector2();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+
+  // Only check editable walls
+  const editableMeshes = Array.from(wallMeshes.entries())
+    .filter(([id]) => id !== 'top' && id !== 'bottom')
+    .map(([, mesh]) => mesh);
+
+  const intersections = raycaster.intersectObjects(editableMeshes);
+
+  if (intersections.length > 0) {
+    const wallId = getWallIdFromIntersection(intersections[0]);
+    if (wallId && wallId !== lastHoveredWallId) {
+      store.wall.setHoveredWall(wallId);
+      lastHoveredWallId = wallId;
+    }
+  } else {
+    if (lastHoveredWallId !== null) {
+      store.wall.setHoveredWall(null);
+      lastHoveredWallId = null;
+    }
+  }
+}
+
+function updateHoverHighlight(hoveredWallId: WallId | null): void {
+  // Remove highlight from previously hovered wall
+  wallMeshes.forEach((mesh, wallId) => {
+    if (wallId !== 'top' && wallId !== 'bottom' && wallId !== hoveredWallId) {
+      const originalMaterial = wallOriginalMaterials.get(wallId as WallId);
+      if (originalMaterial && mesh.material !== originalMaterial) {
+        // Restore original material
+        if (mesh.material instanceof MeshStandardMaterial) {
+          mesh.material.dispose();
+        }
+        mesh.material = originalMaterial;
+      }
+    }
+  });
+
+  // Apply highlight to hovered wall
+  if (hoveredWallId) {
+    const mesh = wallMeshes.get(hoveredWallId);
+    const originalMaterial = wallOriginalMaterials.get(hoveredWallId);
+    if (mesh && originalMaterial && mesh.material === originalMaterial) {
+      // Clone material and apply emissive glow
+      const hoverMaterial = originalMaterial.clone();
+      hoverMaterial.emissive = new Color(0x4a90e2); // Light blue
+      hoverMaterial.emissiveIntensity = 0.25;
+      mesh.material = hoverMaterial;
+    }
+  }
+}
+
+function updatePerimeterLine(store: RootStore): void {
+  const selectedWallId = store.wall.selectedWallId;
+  
+  perimeterLines.forEach((line, wallId) => {
+    line.visible = wallId === selectedWallId;
+  });
+}
+
 function animate(): void {
   if (animationFrameId !== null) {
     cancelAnimationFrame(animationFrameId);
@@ -356,6 +515,24 @@ function animate(): void {
   const render = (): void => {
     if (controls && renderer && scene && camera) {
       controls.update();
+      
+      // Animate perimeter line dash pattern
+      if (store) {
+        const selectedWallId = store.wall.selectedWallId;
+        if (selectedWallId) {
+          const line = perimeterLines.get(selectedWallId);
+          if (line && line.material instanceof LineDashedMaterial) {
+            // Animate dash pattern by modifying scale in a cyclical way
+            // This creates a "running" effect along the perimeter
+            const material = line.material;
+            const time = performance.now() * 0.001; // Convert to seconds
+            // Use sine wave to create smooth cyclical animation
+            // Scale oscillates to create moving dash effect
+            material.scale = 1 + Math.sin(time * 2) * 0.3;
+          }
+        }
+      }
+      
       renderer.render(scene, camera);
     }
     animationFrameId = requestAnimationFrame(render);
@@ -386,6 +563,19 @@ export function disposeScene(): void {
     }
   });
   wallMeshes.clear();
+  wallOriginalMaterials.clear();
+
+  perimeterLines.forEach((line) => {
+    if (line.geometry) line.geometry.dispose();
+    if (line.material) {
+      if (Array.isArray(line.material)) {
+        line.material.forEach((mat) => mat.dispose());
+      } else {
+        line.material.dispose();
+      }
+    }
+  });
+  perimeterLines.clear();
 
   if (renderer) {
     renderer.dispose();
@@ -396,5 +586,7 @@ export function disposeScene(): void {
   camera = null;
   raycaster = null;
   textureLoader = null;
+  store = null;
+  lastHoveredWallId = null;
 }
 

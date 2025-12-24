@@ -21,9 +21,26 @@ export const WallControls = observer(({ wallStore }: WallControlsProps) => {
 
   return (
     <div>
-      <h2 style={{ marginTop: 0, marginBottom: '1rem' }}>
-        Wall Configuration: {selectedWallId}
-      </h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: 0 }}>
+          Wall Configuration: {selectedWallId}
+        </h2>
+        <button
+          onClick={() => wallStore.deselectWall()}
+          style={{
+            padding: '0.5rem 1rem',
+            backgroundColor: '#666',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+          }}
+          title="Deselect wall"
+        >
+          ✕ Deselect
+        </button>
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <div>
           <label
