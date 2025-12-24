@@ -6,7 +6,7 @@ interface WallControlsProps {
   wallStore: WallModel;
 }
 
-export const WallControls = observer(({ wallStore }: WallControlsProps) => {
+const WallControlsComponent = ({ wallStore }: WallControlsProps) => {
   const selectedConfig = wallStore.selectedWallConfig;
   const selectedWallId = wallStore.selectedWallId;
 
@@ -185,5 +185,7 @@ export const WallControls = observer(({ wallStore }: WallControlsProps) => {
       </div>
     </div>
   );
-});
+};
+
+export const WallControls = observer(WallControlsComponent);
 
