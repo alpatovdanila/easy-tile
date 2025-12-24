@@ -205,13 +205,22 @@ export class RoomStore {
    - If no existing tests, write tests before implementation
    - Verify old and new tests pass after implementation
 3. **Implementation**: Follow architecture and code style guidelines
-4. **Code Review**: Ensure code follows all guidelines
-5. **MANDATORY: Commit Changes After Completion**:
-   - After implementation is complete and accepted by the user, commit all changes
-   - Use descriptive commit messages that clearly explain what was changed and why
+4. **Runtime Error Checking**: 
+   - After implementation, verify the application runs without runtime errors
+   - Use the embedded browser to navigate to the development server (typically `http://localhost:5173`)
+   - Check browser console messages for any errors, warnings, or exceptions
+   - Verify network requests are successful (status 200)
+   - Ensure the UI renders correctly and interactive elements function as expected
+   - Fix any runtime errors before proceeding to code review
+5. **Code Review**: Ensure code follows all guidelines
+6. **Commit Changes After User Review**:
+   - **DO NOT automatically commit** after implementation completion
+   - Wait for explicit user approval/review before committing any changes
+   - Only commit when the user explicitly requests it or approves the changes
+   - When committing, use descriptive commit messages that clearly explain what was changed and why
    - Stage all relevant files (use `git add .` or specific files as appropriate)
    - Create commit with meaningful message (e.g., `git commit -m "feat: implement wall selection with click detection"` or `git commit -m "fix: resolve camera rotation jitter issue"`)
-6. **Merge Request**: Create merge request to master branch after local approval
+7. **Merge Request**: Create merge request to master branch after local approval
 
 ### Testing Strategy
 - Unit tests for stores and business logic
@@ -222,7 +231,7 @@ export class RoomStore {
 - **CRITICAL**: Always create a new branch before making any changes (fixes or features)
 - Fix and Feature branches from master
 - Descriptive commit messages following conventional commits format (feat:, fix:, refactor:, etc.)
-- Commit changes after implementation is complete and accepted
+- **DO NOT commit automatically** - Only commit after user has reviewed and explicitly approved the changes
 - Merge requests for code review
 - Keep commits focused and atomic
 
@@ -295,7 +304,7 @@ export function Room({ width, height, length }: RoomProps) {
 
 - **Always reference this document** when making architectural decisions
 - **MANDATORY: Create a branch first** - Never start implementing fixes or features without creating a new git branch first
-- **MANDATORY: Commit after completion** - Always commit changes after implementation is complete and accepted by the user
+- **DO NOT commit automatically** - Only commit changes after the user has reviewed and explicitly approved them. Wait for user confirmation before committing.
 - **Ask for clarification** if requirements are ambiguous
 - **Follow the separation of concerns** strictly - don't mix store and view logic
 - **Use TypeScript types** - avoid `any` unless absolutely necessary
