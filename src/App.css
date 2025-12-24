@@ -1,0 +1,41 @@
+.ui-overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 1rem;
+  pointer-events: auto; /* Re-enable pointer events for UI */
+}
+
+.controls-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  min-width: 300px;
+  max-width: 400px;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.controls-panel h2 {
+  font-size: 1.25rem;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #213547;
+}
+
+.controls-panel label {
+  color: #213547;
+}
+
+.controls-panel input[type="number"],
+.controls-panel input[type="text"] {
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.controls-panel input[type="number"]:focus,
+.controls-panel input[type="text"]:focus {
+  outline: 2px solid #646cff;
+  outline-offset: 2px;
+}
