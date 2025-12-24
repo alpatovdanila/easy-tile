@@ -1,6 +1,8 @@
 import { observer } from 'mobx-react-lite';
+import { useEffect, useRef, useState } from 'react';
 import type { WallModel } from '../model/wall.model';
 import { ColorPicker } from './ColorPicker';
+import { throttle } from '../lib/throttle';
 
 interface WallControlsProps {
   wallStore: WallModel;
@@ -9,6 +11,43 @@ interface WallControlsProps {
 const WallControlsComponent = ({ wallStore }: WallControlsProps) => {
   const selectedConfig = wallStore.selectedWallConfig;
   const selectedWallId = wallStore.selectedWallId;
+
+  // Local state for immediate UI feedback
+  const [localSpacing, setLocalSpacing] = useState<number | null>(null);
+  const [localGroutColor, setLocalGroutColor] = useState<string | null>(null);
+
+  // Create throttled store update functions
+  const throttledSetSpacingRef = useRef<((spacing: number) => void) | null>(null);
+  const throttledSetGroutColorRef = useRef<((color: string) => void) | null>(null);
+
+  // Initialize throttled functions
+  useEffect(() => {
+    if (selectedWallId !== null) {
+      throttledSetSpacingRef.current = throttle((spacing: number) => {
+        wallStore.setSpacing(selectedWallId, spacing);
+      }, 150);
+
+      throttledSetGroutColorRef.current = throttle((color: string) => {
+        wallStore.setGroutColor(selectedWallId, color);
+      }, 100);
+    }
+    return () => {
+      throttledSetSpacingRef.current = null;
+      throttledSetGroutColorRef.current = null;
+    };
+  }, [selectedWallId, wallStore]);
+
+  // Sync local state with store when wall selection changes
+  useEffect(() => {
+    if (selectedConfig) {
+      setLocalSpacing(selectedConfig.spacing);
+      setLocalGroutColor(selectedConfig.groutColor);
+    } else {
+      setLocalSpacing(null);
+      setLocalGroutColor(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWallId]);
 
   if (!selectedConfig || selectedWallId === null) {
     return (
@@ -53,6 +92,7 @@ const WallControlsComponent = ({ wallStore }: WallControlsProps) => {
             Tile Image
           </label>
           <input
+            key={selectedWallId}
             type="file"
             accept="image/*"
             onChange={(e) => {
@@ -162,13 +202,14 @@ const WallControlsComponent = ({ wallStore }: WallControlsProps) => {
           </label>
           <input
             type="number"
-            value={selectedConfig.spacing}
-            onChange={(e) =>
-              wallStore.setSpacing(
-                selectedWallId,
-                Number.parseFloat(e.target.value) || 0
-              )
-            }
+            value={localSpacing ?? selectedConfig.spacing}
+            onChange={(e) => {
+              const value = Number.parseFloat(e.target.value) || 0;
+              setLocalSpacing(value);
+              if (throttledSetSpacingRef.current) {
+                throttledSetSpacingRef.current(value);
+              }
+            }}
             style={{
               width: '100%',
               padding: '0.5rem',
@@ -178,8 +219,13 @@ const WallControlsComponent = ({ wallStore }: WallControlsProps) => {
           />
         </div>
         <ColorPicker
-          value={selectedConfig.groutColor}
-          onChange={(color) => wallStore.setGroutColor(selectedWallId, color)}
+          value={localGroutColor ?? selectedConfig.groutColor}
+          onChange={(color) => {
+            setLocalGroutColor(color);
+            if (throttledSetGroutColorRef.current) {
+              throttledSetGroutColorRef.current(color);
+            }
+          }}
           label="Grout Color"
         />
       </div>

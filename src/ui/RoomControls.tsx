@@ -18,7 +18,7 @@ export const RoomControls = observer(({ roomStore }: RoomControlsProps) => {
               fontWeight: '500',
             }}
           >
-            Width (mm)
+            Width (m)
           </label>
           <input
             type="number"
@@ -42,7 +42,7 @@ export const RoomControls = observer(({ roomStore }: RoomControlsProps) => {
               fontWeight: '500',
             }}
           >
-            Height (mm)
+            Height (m)
           </label>
           <input
             type="number"
@@ -66,7 +66,7 @@ export const RoomControls = observer(({ roomStore }: RoomControlsProps) => {
               fontWeight: '500',
             }}
           >
-            Length (mm)
+            Length (m)
           </label>
           <input
             type="number"

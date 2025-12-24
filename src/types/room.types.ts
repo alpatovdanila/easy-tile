@@ -1,12 +1,12 @@
 export type RoomDimensions = {
-  width: number; // mm
-  height: number; // mm
-  length: number; // mm
+  width: number; // meters
+  height: number; // meters
+  length: number; // meters
 };
 
 export const DEFAULT_ROOM_DIMENSIONS: RoomDimensions = {
-  width: 3000,
-  height: 2500,
-  length: 4000,
+  width: 3,
+  height: 2.5,
+  length: 4,
 };
 

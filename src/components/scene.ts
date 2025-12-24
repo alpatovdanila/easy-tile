@@ -228,9 +228,10 @@ function updateRoom(store: RootStore): void {
   });
   perimeterLines.clear();
 
-  const width = mmToMeters(store.room.width);
-  const height = mmToMeters(store.room.height);
-  const length = mmToMeters(store.room.length);
+  // Room dimensions are already in meters
+  const width = store.room.width;
+  const height = store.room.height;
+  const length = store.room.length;
 
   // Create 6 walls
   const halfWidth = width / 2;
