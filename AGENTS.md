@@ -234,6 +234,10 @@ export class RoomStore {
 - **DO NOT commit automatically** - Only commit after user has reviewed and explicitly approved the changes
 - Merge requests for code review
 - Keep commits focused and atomic
+- **"Master it" Command**: When the user says "master it", perform the following:
+  1. Merge the current branch into master (e.g., `git checkout master && git merge <current-branch>`)
+  2. Switch to the master branch (which will be freshly updated after the merge)
+  3. Ensure master is up to date with the merged changes
 
 ---
 
@@ -305,6 +309,7 @@ export function Room({ width, height, length }: RoomProps) {
 - **Always reference this document** when making architectural decisions
 - **MANDATORY: Create a branch first** - Never start implementing fixes or features without creating a new git branch first
 - **DO NOT commit automatically** - Only commit changes after the user has reviewed and explicitly approved them. Wait for user confirmation before committing.
+- **"Master it" command** - When the user says "master it", merge the current branch to master and switch to the freshly updated master branch
 - **Ask for clarification** if requirements are ambiguous
 - **Follow the separation of concerns** strictly - don't mix store and view logic
 - **Use TypeScript types** - avoid `any` unless absolutely necessary
