@@ -161,113 +161,75 @@ export function createWallPerimeterLine(
   const dashSegments: DashSegment[] = [];
   const perimeterLength = 2 * (size.x + size.y);
 
-  // Create dashed segments for each edge and store their metadata
-  // Top edge (left to right)
-  const topEdgeLength = size.x;
-  const topSegments = Math.ceil(topEdgeLength / segmentLength);
-  for (let i = 0; i < topSegments; i++) {
-    const startX = -halfWidth + i * segmentLength;
-    const endX = Math.min(startX + dashLength, halfWidth);
-    if (startX >= halfWidth) break;
-    
-    const dashWidth = endX - startX;
-    if (dashWidth > 0) {
+  // Create dashes continuously along the entire perimeter
+  // This ensures consistent spacing even around corners
+  let currentPosition = 0;
+  while (currentPosition < perimeterLength) {
+    // Determine which edge we're on and calculate position
+    let edge: 'top' | 'right' | 'bottom' | 'left';
+    let meshX: number, meshY: number;
+    let dashActualLength: number;
+    let isHorizontal: boolean;
+
+    if (currentPosition < size.x) {
+      // Top edge (left to right)
+      edge = 'top';
+      isHorizontal = true;
+      const x = currentPosition - size.x / 2;
+      const dashEnd = Math.min(currentPosition + dashLength, size.x);
+      dashActualLength = dashEnd - currentPosition;
+      meshX = (x + (dashEnd - size.x / 2)) / 2;
+      meshY = halfHeight;
+    } else if (currentPosition < size.x + size.y) {
+      // Right edge (top to bottom)
+      edge = 'right';
+      isHorizontal = false;
+      const yOffset = currentPosition - size.x;
+      const y = halfHeight - yOffset;
+      const dashEnd = Math.min(currentPosition + dashLength, size.x + size.y);
+      dashActualLength = dashEnd - currentPosition;
+      meshX = halfWidth;
+      meshY = (y + (halfHeight - (dashEnd - size.x))) / 2;
+    } else if (currentPosition < 2 * size.x + size.y) {
+      // Bottom edge (right to left)
+      edge = 'bottom';
+      isHorizontal = true;
+      const xOffset = currentPosition - size.x - size.y;
+      const x = halfWidth - xOffset;
+      const dashEnd = Math.min(currentPosition + dashLength, 2 * size.x + size.y);
+      dashActualLength = dashEnd - currentPosition;
+      meshX = (x + (halfWidth - (dashEnd - size.x - size.y))) / 2;
+      meshY = -halfHeight;
+    } else {
+      // Left edge (bottom to top)
+      edge = 'left';
+      isHorizontal = false;
+      const yOffset = currentPosition - 2 * size.x - size.y;
+      const y = -halfHeight + yOffset;
+      const dashEnd = Math.min(currentPosition + dashLength, perimeterLength);
+      dashActualLength = dashEnd - currentPosition;
+      meshX = -halfWidth;
+      meshY = (y + (-halfHeight + (dashEnd - 2 * size.x - size.y))) / 2;
+    }
+
+    if (dashActualLength > 0) {
       // Always create as horizontal geometry (wide X, thin Y)
-      const geometry = new BoxGeometry(dashWidth, lineThickness, lineThickness);
+      const geometry = new BoxGeometry(dashActualLength, lineThickness, lineThickness);
       const mesh = new Mesh(geometry, material);
-      const basePosition = startX + halfWidth; // Position along top edge (0 to width)
-      mesh.position.set((startX + endX) / 2, halfHeight, zOffset);
-      mesh.rotation.z = 0; // Horizontal
+      mesh.position.set(meshX, meshY, zOffset);
+      mesh.rotation.z = isHorizontal ? 0 : Math.PI / 2;
       group.add(mesh);
       dashSegments.push({
         mesh,
-        edge: 'top',
-        basePosition,
-        length: dashWidth,
+        edge,
+        basePosition: currentPosition,
+        length: dashActualLength,
         isHorizontalGeometry: true,
       });
     }
-  }
 
-  // Right edge (top to bottom)
-  const rightEdgeLength = size.y;
-  const rightSegments = Math.ceil(rightEdgeLength / segmentLength);
-  for (let i = 0; i < rightSegments; i++) {
-    const startY = halfHeight - i * segmentLength;
-    const endY = Math.max(startY - dashLength, -halfHeight);
-    if (startY <= -halfHeight) break;
-    
-    const dashHeight = startY - endY;
-    if (dashHeight > 0) {
-      // Create as horizontal geometry, will rotate to vertical
-      const geometry = new BoxGeometry(dashHeight, lineThickness, lineThickness);
-      const mesh = new Mesh(geometry, material);
-      const basePosition = size.x + (halfHeight - startY); // Position along perimeter
-      mesh.position.set(halfWidth, (startY + endY) / 2, zOffset);
-      mesh.rotation.z = Math.PI / 2; // Rotate to vertical
-      group.add(mesh);
-      dashSegments.push({
-        mesh,
-        edge: 'right',
-        basePosition,
-        length: dashHeight,
-        isHorizontalGeometry: true, // Created as horizontal, rotated
-      });
-    }
-  }
-
-  // Bottom edge (right to left)
-  const bottomEdgeLength = size.x;
-  const bottomSegments = Math.ceil(bottomEdgeLength / segmentLength);
-  for (let i = 0; i < bottomSegments; i++) {
-    const startX = halfWidth - i * segmentLength;
-    const endX = Math.max(startX - dashLength, -halfWidth);
-    if (startX <= -halfWidth) break;
-    
-    const dashWidth = startX - endX;
-    if (dashWidth > 0) {
-      // Always create as horizontal geometry (wide X, thin Y)
-      const geometry = new BoxGeometry(dashWidth, lineThickness, lineThickness);
-      const mesh = new Mesh(geometry, material);
-      const basePosition = size.x + size.y + (halfWidth - startX); // Position along perimeter
-      mesh.position.set((startX + endX) / 2, -halfHeight, zOffset);
-      mesh.rotation.z = 0; // Horizontal
-      group.add(mesh);
-      dashSegments.push({
-        mesh,
-        edge: 'bottom',
-        basePosition,
-        length: dashWidth,
-        isHorizontalGeometry: true,
-      });
-    }
-  }
-
-  // Left edge (bottom to top)
-  const leftEdgeLength = size.y;
-  const leftSegments = Math.ceil(leftEdgeLength / segmentLength);
-  for (let i = 0; i < leftSegments; i++) {
-    const startY = -halfHeight + i * segmentLength;
-    const endY = Math.min(startY + dashLength, halfHeight);
-    if (startY >= halfHeight) break;
-    
-    const dashHeight = endY - startY;
-    if (dashHeight > 0) {
-      // Create as horizontal geometry, will rotate to vertical
-      const geometry = new BoxGeometry(dashHeight, lineThickness, lineThickness);
-      const mesh = new Mesh(geometry, material);
-      const basePosition = 2 * size.x + size.y + (startY + halfHeight); // Position along perimeter
-      mesh.position.set(-halfWidth, (startY + endY) / 2, zOffset);
-      mesh.rotation.z = Math.PI / 2; // Rotate to vertical
-      group.add(mesh);
-      dashSegments.push({
-        mesh,
-        edge: 'left',
-        basePosition,
-        length: dashHeight,
-        isHorizontalGeometry: true, // Created as horizontal, rotated
-      });
-    }
+    // Move to next dash position (dash + gap)
+    currentPosition += segmentLength;
   }
 
   // Store animation data in group userData
