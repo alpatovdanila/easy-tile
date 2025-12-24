@@ -158,7 +158,7 @@ export function createWallPerimeterLine(
     color: 0xff6b6b, // Bright accent color
     dashSize: 0.1, // meters
     gapSize: 0.05, // meters
-    linewidth: 5,
+    linewidth: 15,
   });
 
   const line = new Line(geometry, material);
