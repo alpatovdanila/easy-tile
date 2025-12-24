@@ -81,6 +81,135 @@ function createCheckerboardTexture(
   return texture;
 }
 
+/**
+ * Create a composite texture that includes tile image with spacing (grout)
+ * @param tileImageUrl - URL of tile image, or null for checkerboard
+ * @param tileWidth - Tile width in mm
+ * @param tileHeight - Tile height in mm
+ * @param spacing - Spacing between tiles in mm
+ * @param groutColor - Color for grout/spacing
+ * @returns Promise that resolves to a CanvasTexture with tile and spacing
+ */
+function createTileTextureWithSpacing(
+  tileImageUrl: string | null,
+  tileWidth: number, // mm
+  tileHeight: number, // mm
+  spacing: number, // mm
+  groutColor: string
+): Promise<CanvasTexture> {
+  return new Promise((resolve, reject) => {
+    // Calculate effective tile size including spacing
+    const effectiveTileWidth = tileWidth + spacing;
+    const effectiveTileHeight = tileHeight + spacing;
+
+    // Convert to meters for calculations
+    const effectiveTileWidthM = mmToMeters(effectiveTileWidth);
+    const effectiveTileHeightM = mmToMeters(effectiveTileHeight);
+
+    // Determine canvas resolution - use a reasonable size that maintains quality
+    // Aim for at least 256px per tile, but cap at reasonable maximum
+    const pixelsPerMeter = 512; // Good quality
+    const canvasWidth = Math.max(256, Math.ceil(effectiveTileWidthM * pixelsPerMeter));
+    const canvasHeight = Math.max(256, Math.ceil(effectiveTileHeightM * pixelsPerMeter));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      reject(new Error('Could not get canvas context'));
+      return;
+    }
+
+    // Fill entire canvas with grout color
+    ctx.fillStyle = groutColor;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Calculate tile area in canvas pixels
+    const tileWidthPx = (tileWidth / effectiveTileWidth) * canvasWidth;
+    const tileHeightPx = (tileHeight / effectiveTileHeight) * canvasHeight;
+    const spacingX = (spacing / effectiveTileWidth) * canvasWidth;
+    const spacingY = (spacing / effectiveTileHeight) * canvasHeight;
+
+    // Center the tile in the canvas (leaving spacing around edges)
+    const tileX = spacingX / 2;
+    const tileY = spacingY / 2;
+
+    if (tileImageUrl) {
+      // Load tile image and draw it
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        // Draw the tile image centered in the canvas
+        ctx.drawImage(img, tileX, tileY, tileWidthPx, tileHeightPx);
+        const texture = new CanvasTexture(canvas);
+        texture.wrapS = RepeatWrapping;
+        texture.wrapT = RepeatWrapping;
+        resolve(texture);
+      };
+      img.onerror = () => {
+        // Fallback to checkerboard if image fails to load
+        createCheckerboardWithSpacing(
+          tileWidthPx,
+          tileHeightPx,
+          tileX,
+          tileY,
+          ctx,
+          groutColor
+        );
+        const texture = new CanvasTexture(canvas);
+        texture.wrapS = RepeatWrapping;
+        texture.wrapT = RepeatWrapping;
+        resolve(texture);
+      };
+      img.src = tileImageUrl;
+    } else {
+      // No tile image - create checkerboard pattern with spacing
+      createCheckerboardWithSpacing(
+        tileWidthPx,
+        tileHeightPx,
+        tileX,
+        tileY,
+        ctx,
+        groutColor
+      );
+      const texture = new CanvasTexture(canvas);
+      texture.wrapS = RepeatWrapping;
+      texture.wrapT = RepeatWrapping;
+      resolve(texture);
+    }
+  });
+}
+
+/**
+ * Helper function to draw checkerboard pattern in a tile area
+ */
+function createCheckerboardWithSpacing(
+  tileWidthPx: number,
+  tileHeightPx: number,
+  tileX: number,
+  tileY: number,
+  ctx: CanvasRenderingContext2D,
+  groutColor: string
+): void {
+  const baseColor = new Color(groutColor);
+  const lighterColor = baseColor.clone().lerp(new Color(0xffffff), 0.3);
+  const checkerSize = Math.min(tileWidthPx, tileHeightPx) / 4; // 4x4 checkerboard
+
+  for (let y = 0; y < tileHeightPx; y += checkerSize) {
+    for (let x = 0; x < tileWidthPx; x += checkerSize) {
+      const checkX = tileX + x;
+      const checkY = tileY + y;
+      const checkWidth = Math.min(checkerSize, tileWidthPx - x);
+      const checkHeight = Math.min(checkerSize, tileHeightPx - y);
+      const isEven = (Math.floor(x / checkerSize) + Math.floor(y / checkerSize)) % 2 === 0;
+      ctx.fillStyle = isEven ? groutColor : `#${lighterColor.getHexString()}`;
+      ctx.fillRect(checkX, checkY, checkWidth, checkHeight);
+    }
+  }
+}
+
 export function initScene(container: HTMLElement, rootStore: RootStore): void {
   store = rootStore;
   // Initialize Three.js components
@@ -97,10 +226,11 @@ export function initScene(container: HTMLElement, rootStore: RootStore): void {
 
   const aspect = container.clientWidth / container.clientHeight;
   camera = new PerspectiveCamera(75, aspect, 0.1, 1000);
-  // Position camera at center of room (inside)
-  camera.position.set(0, 0, 0);
+  // Camera will be positioned at 1.8m from floor in updateRoom()
+  // For now, set initial position (will be updated when room is created)
+  camera.position.set(0, 1.8, 0);
   // Look slightly forward to see the front wall
-  camera.lookAt(0, 0, -1);
+  camera.lookAt(0, 1.8, -1);
 
   renderer = new WebGLRenderer({ antialias: true });
   renderer.setSize(container.clientWidth, container.clientHeight);
@@ -233,6 +363,21 @@ function updateRoom(store: RootStore): void {
   const height = store.room.height;
   const length = store.room.length;
 
+  // Update camera position to be 1.8m from floor
+  // Floor Y position = -halfHeight, so camera Y = -halfHeight + 1.8
+  if (camera) {
+    const halfHeight = height / 2;
+    const floorY = -halfHeight;
+    camera.position.y = floorY + 1.8;
+    // Maintain horizontal center position
+    camera.position.x = 0;
+    camera.position.z = 0;
+    // Update look-at direction to maintain current view direction
+    const currentDirection = new Vector3();
+    camera.getWorldDirection(currentDirection);
+    camera.lookAt(camera.position.clone().add(currentDirection));
+  }
+
   // Create 6 walls
   const halfWidth = width / 2;
   const halfHeight = height / 2;
@@ -324,54 +469,100 @@ function createWall(
 
   if (config && wallId !== 'top' && wallId !== 'bottom') {
     // Editable wall with tile configuration
-    if (config.imageUrl) {
-      const texture = textureLoader!.load(config.imageUrl);
-      texture.wrapS = RepeatWrapping;
-      texture.wrapT = RepeatWrapping;
-      
-      const tileWidthM = mmToMeters(config.tileWidth);
-      const tileHeightM = mmToMeters(config.tileHeight);
-      const repeatX = size.x / tileWidthM;
-      const repeatY = size.y / tileHeightM;
-      
-      texture.repeat.set(repeatX, repeatY);
-      
+    if (config.spacing === 0) {
+      // No spacing - use simple texture repeat (original behavior)
+      if (config.imageUrl) {
+        const texture = textureLoader!.load(config.imageUrl);
+        texture.wrapS = RepeatWrapping;
+        texture.wrapT = RepeatWrapping;
+        
+        const tileWidthM = mmToMeters(config.tileWidth);
+        const tileHeightM = mmToMeters(config.tileHeight);
+        const repeatX = size.x / tileWidthM;
+        const repeatY = size.y / tileHeightM;
+        
+        texture.repeat.set(repeatX, repeatY);
+        
+        material = new MeshStandardMaterial({
+          map: texture,
+          side: DoubleSide,
+        });
+      } else {
+        // No texture, use default checkerboard pattern
+        const tileSizeM = mmToMeters(config.tileWidth);
+        const baseColor = new Color(config.groutColor);
+        const lighterColor = baseColor.clone().lerp(new Color(0xffffff), 0.3);
+        const checkerboardTexture = createCheckerboardTexture(
+          32, // 32px tiles in texture
+          config.groutColor,
+          `#${lighterColor.getHexString()}`
+        );
+        
+        // Calculate repeat based on wall size and tile size
+        const repeatX = size.x / tileSizeM;
+        const repeatY = size.y / tileSizeM;
+        checkerboardTexture.repeat.set(repeatX, repeatY);
+        
+        material = new MeshStandardMaterial({
+          map: checkerboardTexture,
+          side: DoubleSide,
+        });
+      }
+    } else {
+      // Spacing > 0 - use composite texture with spacing
+      // Create temporary material first (will be updated when texture loads)
       material = new MeshStandardMaterial({
-        map: texture,
+        color: new Color(config.groutColor),
         side: DoubleSide,
       });
-    } else {
-      // No texture, use default checkerboard pattern
-      const tileSizeM = mmToMeters(config.tileWidth);
-      const baseColor = new Color(config.groutColor);
-      const lighterColor = baseColor.clone().lerp(new Color(0xffffff), 0.3);
-      const checkerboardTexture = createCheckerboardTexture(
-        32, // 32px tiles in texture
-        config.groutColor,
-        `#${lighterColor.getHexString()}`
-      );
-      
-      // Calculate repeat based on wall size and tile size
-      const repeatX = size.x / tileSizeM;
-      const repeatY = size.y / tileSizeM;
-      checkerboardTexture.repeat.set(repeatX, repeatY);
-      
-      material = new MeshStandardMaterial({
-        map: checkerboardTexture,
-        side: DoubleSide,
+
+      // Create composite texture asynchronously
+      createTileTextureWithSpacing(
+        config.imageUrl,
+        config.tileWidth,
+        config.tileHeight,
+        config.spacing,
+        config.groutColor
+      ).then((texture) => {
+        // Calculate repeat based on effective tile size (including spacing)
+        const effectiveTileWidthM = mmToMeters(config.tileWidth + config.spacing);
+        const effectiveTileHeightM = mmToMeters(config.tileHeight + config.spacing);
+        const repeatX = size.x / effectiveTileWidthM;
+        const repeatY = size.y / effectiveTileHeightM;
+        texture.repeat.set(repeatX, repeatY);
+
+        // Update material with the composite texture
+        if (material) {
+          material.map = texture;
+          material.color = new Color(0xffffff); // Reset color when texture is applied
+          material.needsUpdate = true;
+        }
+      }).catch((error) => {
+        console.error('Failed to create tile texture with spacing:', error);
+        // Material already has grout color as fallback
       });
     }
   } else {
-    // Non-editable wall (ceiling/floor) - default checkerboard pattern
-    const defaultTexture = createCheckerboardTexture(32, '#f0f0f0', '#e0e0e0');
-    const repeatX = size.x / 0.5; // 0.5m tiles
-    const repeatY = size.y / 0.5;
-    defaultTexture.repeat.set(repeatX, repeatY);
-    
-    material = new MeshStandardMaterial({
-      map: defaultTexture,
-      side: DoubleSide,
-    });
+    // Non-editable wall (ceiling/floor) - solid colors
+    if (wallId === 'top') {
+      // Ceiling: solid white
+      material = new MeshStandardMaterial({
+        color: 0xffffff, // White
+        side: DoubleSide,
+      });
+    } else if (wallId === 'bottom') {
+      // Floor: solid gray
+      material = new MeshStandardMaterial({
+        color: 0x808080, // Gray
+        side: DoubleSide,
+      });
+    } else {
+      // Fallback (shouldn't happen)
+      material = new MeshStandardMaterial({
+        color: 0xffffff,
+        side: DoubleSide,
+      });
+    }
   }
 
   const mesh = new Mesh(geometry, material);

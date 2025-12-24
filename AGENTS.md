@@ -4,6 +4,12 @@
 
 ---
 
+## Recent Changes
+
+**Note**: This section should always be updated with a short and descriptive summary of any changes made to this document. When modifying AGENTS.md, add a brief entry here explaining what was changed and why, before making the actual changes.
+
+---
+
 ## Project Overview
 
 ### Application Purpose

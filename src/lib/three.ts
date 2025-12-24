@@ -51,22 +51,31 @@ export function createOrbitControls(
     const deltaX = event.clientX - previousMousePosition.x;
     const deltaY = event.clientY - previousMousePosition.y;
 
-    // Invert direction: drag right rotates left, drag down rotates up
+    // Invert direction: drag right rotates left, drag down rotates down (natural)
     rotationY -= deltaX * 0.005;
-    rotationX -= deltaY * 0.005;
+    rotationX += deltaY * 0.005; // Changed sign: drag down now rotates down
     
     // Clamp vertical rotation to avoid flipping
     rotationX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotationX));
 
-    // Camera stays at center, calculate look direction based on rotation
+    // Preserve camera Y position (for camera height)
+    const cameraY = camera.position.y;
+    
+    // Calculate look direction based on rotation
     const direction = new Vector3();
     direction.x = Math.sin(rotationY) * Math.cos(rotationX);
     direction.y = Math.sin(rotationX);
     direction.z = -Math.cos(rotationY) * Math.cos(rotationX);
 
-    // Set camera to look in the calculated direction from center
-    camera.position.set(0, 0, 0);
-    camera.lookAt(direction);
+    // Set camera position (preserve Y for height)
+    camera.position.set(0, cameraY, 0);
+    // Look at a point in the calculated direction from camera position
+    const lookAtPoint = new Vector3(
+      camera.position.x + direction.x,
+      camera.position.y + direction.y,
+      camera.position.z + direction.z
+    );
+    camera.lookAt(lookAtPoint);
 
     previousMousePosition.set(event.clientX, event.clientY);
   };

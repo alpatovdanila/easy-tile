@@ -4,7 +4,7 @@
  * @param delay - The delay in milliseconds between allowed calls
  * @returns A throttled version of the function
  */
-export function throttle<T extends (...args: unknown[]) => void>(
+export function throttle<T extends (...args: any[]) => void>(
   func: T,
   delay: number
 ): T {
