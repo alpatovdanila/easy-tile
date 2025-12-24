@@ -18,8 +18,7 @@ import {
   CanvasTexture,
   AmbientLight,
   DirectionalLight,
-  Line,
-  LineDashedMaterial,
+  Group,
 } from 'three';
 import {
   createOrbitControls,
@@ -39,7 +38,7 @@ let controls: ReturnType<typeof createOrbitControls> | null = null;
 let raycaster: ReturnType<typeof createRaycaster> | null = null;
 let wallMeshes: Map<WallId | 'top' | 'bottom', Mesh> = new Map();
 let wallOriginalMaterials: Map<WallId, MeshStandardMaterial> = new Map();
-let perimeterLines: Map<WallId, Line> = new Map();
+let perimeterLines: Map<WallId, Group> = new Map();
 let animationFrameId: number | null = null;
 let textureLoader: TextureLoader | null = null;
 let mouseDownPosition: Vector2 | null = null;
@@ -210,16 +209,21 @@ function updateRoom(store: RootStore): void {
   wallOriginalMaterials.clear();
 
   // Clear existing perimeter lines
-  perimeterLines.forEach((line) => {
-    scene!.remove(line);
-    if (line.geometry) line.geometry.dispose();
-    if (line.material) {
-      if (Array.isArray(line.material)) {
-        line.material.forEach((mat) => mat.dispose());
-      } else {
-        line.material.dispose();
+  perimeterLines.forEach((group) => {
+    scene!.remove(group);
+    // Dispose of all meshes in the group
+    group.traverse((child) => {
+      if (child instanceof Mesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((mat) => mat.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
       }
-    }
+    });
   });
   perimeterLines.clear();
 
@@ -389,10 +393,10 @@ function createPerimeterLineForWall(
   size: Vector2,
   scene: Scene
 ): void {
-  const line = createWallPerimeterLine(wallId, position, rotation, size);
-  line.visible = false; // Hidden by default, shown when wall is selected
-  scene.add(line);
-  perimeterLines.set(wallId, line);
+  const group = createWallPerimeterLine(wallId, position, rotation, size);
+  group.visible = false; // Hidden by default, shown when wall is selected
+  scene.add(group);
+  perimeterLines.set(wallId, group);
 }
 
 function handleClick(
@@ -516,19 +520,16 @@ function animate(): void {
     if (controls && renderer && scene && camera) {
       controls.update();
       
-      // Animate perimeter line dash pattern
+      // Animate perimeter line dash pattern (for geometry-based lines, we can rotate or pulse)
       if (store) {
         const selectedWallId = store.wall.selectedWallId;
         if (selectedWallId) {
-          const line = perimeterLines.get(selectedWallId);
-          if (line && line.material instanceof LineDashedMaterial) {
-            // Animate dash pattern by modifying scale in a cyclical way
-            // This creates a "running" effect along the perimeter
-            const material = line.material;
+          const group = perimeterLines.get(selectedWallId);
+          if (group) {
+            // Create a subtle pulsing effect by scaling the group
             const time = performance.now() * 0.001; // Convert to seconds
-            // Use sine wave to create smooth cyclical animation
-            // Scale oscillates to create moving dash effect
-            material.scale = 1 + Math.sin(time * 2) * 0.3;
+            const pulse = 1 + Math.sin(time * 3) * 0.1; // Subtle pulse (10% variation)
+            group.scale.set(pulse, pulse, pulse);
           }
         }
       }
@@ -565,15 +566,20 @@ export function disposeScene(): void {
   wallMeshes.clear();
   wallOriginalMaterials.clear();
 
-  perimeterLines.forEach((line) => {
-    if (line.geometry) line.geometry.dispose();
-    if (line.material) {
-      if (Array.isArray(line.material)) {
-        line.material.forEach((mat) => mat.dispose());
-      } else {
-        line.material.dispose();
+  perimeterLines.forEach((group) => {
+    // Dispose of all meshes in the group
+    group.traverse((child) => {
+      if (child instanceof Mesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((mat) => mat.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
       }
-    }
+    });
   });
   perimeterLines.clear();
 

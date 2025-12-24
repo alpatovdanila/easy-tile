@@ -6,9 +6,10 @@ import {
   Raycaster,
   Vector2,
   Vector3,
-  BufferGeometry,
-  Line,
-  LineDashedMaterial,
+  BoxGeometry,
+  Mesh,
+  MeshBasicMaterial,
+  Group,
 } from 'three';
 import type { Intersection } from 'three';
 import type { WallId } from '../types/wall.types';
@@ -123,51 +124,105 @@ export function metersToMm(meters: number): number {
 }
 
 /**
- * Create a dashed perimeter line for a wall
+ * Create a thick dashed perimeter border for a wall using geometry
  * @param _wallId - The wall identifier (unused, kept for API consistency)
  * @param position - Wall center position
  * @param rotation - Wall rotation (Euler angles)
  * @param size - Wall dimensions (width, height)
- * @returns A Line object with dashed material
+ * @returns A Group containing the perimeter border meshes
  */
 export function createWallPerimeterLine(
   _wallId: WallId,
   position: Vector3,
   rotation: Vector3,
   size: Vector2
-): Line {
+): Group {
   const halfWidth = size.x / 2;
   const halfHeight = size.y / 2;
-  const offset = 0.001; // Small offset to prevent z-fighting
+  const offset = 0.01; // Offset to prevent z-fighting (increased for visibility)
+  const lineThickness = 0.02; // 2cm thick line
+  const dashLength = 0.15; // 15cm dash length
+  const gapLength = 0.08; // 8cm gap length
+  const segmentLength = dashLength + gapLength;
 
-  // Calculate corner points in local space (wall's local coordinate system)
-  // The wall is a plane in XY plane, with normal pointing in +Z direction
-  const corners = [
-    new Vector3(-halfWidth, -halfHeight, offset),
-    new Vector3(halfWidth, -halfHeight, offset),
-    new Vector3(halfWidth, halfHeight, offset),
-    new Vector3(-halfWidth, halfHeight, offset),
-    new Vector3(-halfWidth, -halfHeight, offset), // Close loop
-  ];
-
-  // Create geometry from points (in local space)
-  const geometry = new BufferGeometry().setFromPoints(corners);
-
-  // Create dashed material
-  const material = new LineDashedMaterial({
+  const group = new Group();
+  const material = new MeshBasicMaterial({
     color: 0xff6b6b, // Bright accent color
-    dashSize: 0.1, // meters
-    gapSize: 0.05, // meters
-    linewidth: 15,
   });
 
-  const line = new Line(geometry, material);
-  line.computeLineDistances(); // Required for LineDashedMaterial (called on Line, not geometry)
+  // Create dashed segments for each edge
+  // Top edge
+  const topEdgeLength = size.x;
+  const topSegments = Math.ceil(topEdgeLength / segmentLength);
+  for (let i = 0; i < topSegments; i++) {
+    const startX = -halfWidth + i * segmentLength;
+    const endX = Math.min(startX + dashLength, halfWidth);
+    if (startX >= halfWidth) break;
+    
+    const dashWidth = endX - startX;
+    if (dashWidth > 0) {
+      const geometry = new BoxGeometry(dashWidth, lineThickness, lineThickness);
+      const mesh = new Mesh(geometry, material);
+      mesh.position.set((startX + endX) / 2, halfHeight, offset);
+      group.add(mesh);
+    }
+  }
 
-  // Apply wall's transform to the line
-  line.position.copy(position);
-  line.rotation.set(rotation.x, rotation.y, rotation.z);
+  // Bottom edge
+  const bottomEdgeLength = size.x;
+  const bottomSegments = Math.ceil(bottomEdgeLength / segmentLength);
+  for (let i = 0; i < bottomSegments; i++) {
+    const startX = -halfWidth + i * segmentLength;
+    const endX = Math.min(startX + dashLength, halfWidth);
+    if (startX >= halfWidth) break;
+    
+    const dashWidth = endX - startX;
+    if (dashWidth > 0) {
+      const geometry = new BoxGeometry(dashWidth, lineThickness, lineThickness);
+      const mesh = new Mesh(geometry, material);
+      mesh.position.set((startX + endX) / 2, -halfHeight, offset);
+      group.add(mesh);
+    }
+  }
 
-  return line;
+  // Left edge
+  const leftEdgeLength = size.y;
+  const leftSegments = Math.ceil(leftEdgeLength / segmentLength);
+  for (let i = 0; i < leftSegments; i++) {
+    const startY = -halfHeight + i * segmentLength;
+    const endY = Math.min(startY + dashLength, halfHeight);
+    if (startY >= halfHeight) break;
+    
+    const dashHeight = endY - startY;
+    if (dashHeight > 0) {
+      const geometry = new BoxGeometry(lineThickness, dashHeight, lineThickness);
+      const mesh = new Mesh(geometry, material);
+      mesh.position.set(-halfWidth, (startY + endY) / 2, offset);
+      group.add(mesh);
+    }
+  }
+
+  // Right edge
+  const rightEdgeLength = size.y;
+  const rightSegments = Math.ceil(rightEdgeLength / segmentLength);
+  for (let i = 0; i < rightSegments; i++) {
+    const startY = -halfHeight + i * segmentLength;
+    const endY = Math.min(startY + dashLength, halfHeight);
+    if (startY >= halfHeight) break;
+    
+    const dashHeight = endY - startY;
+    if (dashHeight > 0) {
+      const geometry = new BoxGeometry(lineThickness, dashHeight, lineThickness);
+      const mesh = new Mesh(geometry, material);
+      mesh.position.set(halfWidth, (startY + endY) / 2, offset);
+      group.add(mesh);
+    }
+  }
+
+  // Apply wall's transform to the group
+  group.position.copy(position);
+  group.rotation.set(rotation.x, rotation.y, rotation.z);
+
+  return group;
 }
 
